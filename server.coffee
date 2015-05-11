@@ -73,7 +73,7 @@ addTopic = (userId, data) !->
 	name = Plugin.userName(userId)
 	Event.create
 		text: "#{name} added topic: #{topic.title}"
-		sender: Plugin.userId()
+		sender: userId
 
 exports.client_remove = (id) !->
 	return if Plugin.userId() isnt Db.shared.get(id, 'by') and !Plugin.userIsAdmin()

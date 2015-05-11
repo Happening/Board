@@ -398,9 +398,9 @@ renderBoard = !->
 
 		, (topic) ->
 			if +topic.key()
-				newTime = if Event.isNew(topic.get('time')) then -topic.get('time') else 0
-				unreadCount = -Event.getUnread([topic.key()])
-				[newTime, unreadCount, -topic.key()]
+				createTime = topic.get('time')
+				orderTime = Event.getOrder([topic.key()])
+				-Math.max(createTime, orderTime)
 
 		Obs.observe !->
 			if empty.get()
@@ -473,3 +473,8 @@ if !Db.shared
 			Form.input
 				name: '_title'
 				text: tr("Board title (optional)")
+
+###
+exports.renderInfo = !->
+	Dom.div tr("Info!")
+###
