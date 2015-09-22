@@ -1,21 +1,56 @@
 Db = require 'db'
 Event = require 'event'
 Http = require 'http'
+Metatags = require 'metatags'
+OAuth = require 'oauth'
 Photo = require 'photo'
 Plugin = require 'plugin'
-Subscription = require 'subscription'
 
 exports.getTitle = -> # we implemented our own title input
 
-exports.client_searchSub = (cb) !->
-	cb.subscribe 'search:'+Plugin.userId()
+# The `secrets.server.coffee` file cannot be added to the git repo, for
+# obvious reasons. The function should return Yahoo credentials like:
+# `["verylongid09ves4u5w9serawevwa9r9ws8erus8fv9ws8ers--", "passworddfsnsd3ufgnsidu5fndsufg"]`
+yahooConsumerPair = require('secrets').yahooConsumerPair()
 
-exports.client_search = (text) !->
-	Http.get
-		query: text
-		searchYahoo: true
-		name: 'httpSearch'
-		args: [Plugin.userId()]
+exports.client_search = (text,cb) !->
+	request =
+		url: 'https://yboss.yahooapis.com/ysearch/limitedweb?format=json&q=' + encodeURIComponent(text)
+		cb: ['onSearchResults', cb]
+	OAuth.sign request, yahooConsumerPair
+	Http.get request
+
+exports.onSearchResults = (cb, resp) !->
+	metas = {_MODE_:'replace'}
+	if resp.body and (data = JSON.parse(resp.body)) and (results = data?.bossresponse?.limitedweb?.results)
+		i = cnt = 0
+		while cnt<3 and i<results.length
+			url = results[i++].url
+			if prevUrl and url.substr(0,prevUrl.length)==prevUrl
+				continue
+			metas[cnt++] = {url}
+			prevUrl = url
+
+	# Immediately show url search results
+	cb.reply metas
+
+	# Asynchronously fetch meta info for these pages
+	for pos in [0...cnt] by 1
+		url = metas[pos].url
+		Http.get
+			url: url
+			cb: ['onSearchMeta', cb, url, pos]
+
+exports.onSearchMeta = (cb, url, pos, resp) !->
+	if resp.body and meta = Metatags.fromHtml(resp.body)
+		meta.url = url
+	else
+		meta = {url}
+	#log 'onSearchMeta', url, pos, JSON.stringify meta
+	push = {}
+	push[pos] = meta
+	cb.reply push
+
 
 exports.client_add = (text) !->
 	if typeof text is 'object'
@@ -27,10 +62,8 @@ exports.client_add = (text) !->
 	else if (text.toLowerCase().indexOf('http') is 0 or text.toLowerCase().indexOf('www.') is 0) and text.split(' ').length is 1
 		Http.get
 			url: text
-			getMetaTags: true
-			name: 'httpTags'
+			cb: ['httpTags', Plugin.userId(), text]
 			memberId: Plugin.userId()
-			args: [Plugin.userId()]
 	else
 		addTopic Plugin.userId(), title: text
 
@@ -41,16 +74,13 @@ exports.onPhoto = (info, data) !->
 		data.photo = info.key
 		addTopic data.by, data
 
-exports.httpSearch = (userId, data) !->
-	Subscription.push 'search:'+userId, data
-
-exports.httpTags = (userId, data) !->
-	#log 'httpTags received: '+JSON.stringify(data)
-	if !data.url
-		# url was probably malformed, just add as title
-		addTopic userId, title: data.title
+exports.httpTags = (userId, url, resp) !->
+	if resp.body and meta = Metatags.fromHtml(resp.body)
+		meta.url = url
+		addTopic userId, meta
 	else
-		addTopic userId, data
+		# url was probably malformed, just add as title
+		addTopic userId, title:url
 
 addTopic = (userId, data) !->
 	topic =

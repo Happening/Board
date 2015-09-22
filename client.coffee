@@ -134,9 +134,6 @@ renderBoard = !->
 		searchResult = Obs.create false
 		searchLast = Obs.create false
 		searching = Obs.create false
-		Server.send "searchSub", (result) !->
-			searching.set false
-			searchResult.set result
 
 		addE = null
 		addingUrl = Obs.create false
@@ -147,7 +144,9 @@ renderBoard = !->
 			searching.set true
 			searchResult.set false
 			searchLast.set val
-			Server.send 'search', val
+			Server.send 'search', val, (result) !->
+				searchResult.merge result
+				searching.set false
 
 		save = !->
 			return if !(val = addE.value().trim())
@@ -295,7 +294,7 @@ renderBoard = !->
 			results = searchResult.get()
 			#log 'got some results', results
 			if results
-				for result in results then do (result) !->
+				for pos,result of results then do (result) !->
 					topic = Obs.create result
 					Ui.item !->
 						Dom.style padding: '8px 4px'
