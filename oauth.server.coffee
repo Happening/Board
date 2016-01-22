@@ -1,4 +1,4 @@
-Plugin = require 'plugin'
+App = require 'app'
 Transform = require 'transform'
 
 encode = encodeURIComponent
@@ -9,7 +9,7 @@ exports.sign = (request, consumerPair, accessPair) !->
 	[baseUri,getData] = request.url.split '?'
 	httpMethod = request.method ? (if request.data then 'POST' else 'GET')
 	
-	time = 0|Plugin.time()
+	time = 0|App.time()
 	oauth =
 		oauth_consumer_key: consumerPair[0]
 		oauth_nonce: time

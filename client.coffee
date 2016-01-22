@@ -1,3 +1,4 @@
+Comments = require 'comments'
 Db = require 'db'
 Dom = require 'dom'
 Event = require 'event'
@@ -7,9 +8,8 @@ Modal = require 'modal'
 Obs = require 'obs'
 Page = require 'page'
 Photo = require 'photo'
-Plugin = require 'plugin'
+App = require 'app'
 Server = require 'server'
-Social = require 'social'
 Time = require 'time'
 Ui = require 'ui'
 {tr} = require 'i18n'
@@ -23,23 +23,26 @@ exports.render = !->
 
 
 renderTopic = (topicId) !->
+	Comments.enable legacyStore: topicId
 	Page.setTitle tr("Topic")
 	topic = Db.shared.ref(topicId)
 	Event.showStar topic.get('title')
-	if Plugin.userId() is topic.get('by') or Plugin.userIsAdmin()
+	if App.userId() is topic.get('by') or App.userIsAdmin()
 		Page.setActions
-			icon: 'trash'
+			icon: 'delete'
 			action: !->
 				Modal.confirm null, tr("Remove topic?"), !->
 					Server.sync 'remove', topicId, !->
 						Db.shared.remove(topicId)
 					Page.back()
 
+	# Dom.div !->
+	Dom.style ChildMargin: 0
 	Dom.div !->
-		Dom.style margin: '-8px -8px 0', paddingBottom: '8px', backgroundColor: '#f8f8f8', borderBottom: '2px solid #ccc'
+		Dom.style ChildMargin: 12
 
 		Dom.div !->
-			Dom.style Box: 'top', Flex: 1, padding: '8px'
+			Dom.style Box: 'top'
 
 			imgUrl = false
 			if (key = topic.get 'imageThumb') or (key = topic.get 'photo')
@@ -52,7 +55,8 @@ renderTopic = (topicId) !->
 					Dom.style
 						maxWidth: '120px'
 						maxHeight: '200px'
-						margin: '2px 8px 4px 2px'
+						marginBottom: '8px'
+						marginRight: '8px'
 					Dom.prop 'src', imgUrl
 
 			url = topic.get('url')
@@ -74,7 +78,6 @@ renderTopic = (topicId) !->
 					domain = url.match(/(^https?:\/\/)?([^\/]+)/)[2].split('.').slice(-2).join('.')
 					Dom.div !->
 						Dom.style
-							marginTop: '6px'
 							color: '#aaa'
 							fontSize: '90%'
 							whiteSpace: 'nowrap'
@@ -86,7 +89,7 @@ renderTopic = (topicId) !->
 			if url or photoKey # tap either opens the url, or shows the photo
 				Dom.onTap !->
 					if url
-						Plugin.openUrl url
+						App.openUrl url
 					else if photoKey
 						Page.nav !->
 							Page.setTitle tr("Topic photo")
@@ -101,17 +104,16 @@ renderTopic = (topicId) !->
 		byUserId = topic.get('by')
 		Dom.div !->
 			Dom.style
-				margin: '4px 8px 0 8px'
 				fontSize: '70%'
 				color: '#aaa'
-			Dom.text tr("Added by %1", Plugin.userName(byUserId))
+				marginTop: '12px'
+			Dom.text tr("Added by %1", App.userName(byUserId))
 			Dom.text " • "
 			Time.deltaText topic.get('time')
 
 			Dom.text " • "
-			expanded = Social.renderLike
-				path: [topicId]
-				id: 'topic'
+			expanded = Comments.renderLike
+				store: ['likes', topicId+'-topic']
 				userId: byUserId
 				aboutWhat: tr("topic")
 
@@ -119,16 +121,12 @@ renderTopic = (topicId) !->
 			if expanded.get()
 				Dom.div !->
 					Dom.style margin: '0 8px 0 8px'
-					Social.renderLikeNames
-						path: [topicId]
-						id: 'topic'
+					Comments.renderLikeNames
+						store: ['likes', topicId+'-topic']
 						userId: byUserId
 
-	Dom.div !->
-		Dom.style margin: '0 -8px'
-		Social.renderComments(topicId)
-
 renderBoard = !->
+	Page.setCardBackground()
 	addingTopic = Obs.create 0
 	Ui.list !->
 		searchResult = Obs.create false
@@ -177,10 +175,7 @@ renderBoard = !->
 					Dom.div !->
 						Dom.style
 							Box: true
-							padding: '8px'
-							margin: '-8px'
 							backgroundColor: '#fff'
-							borderBottom: '2px solid #ddd'
 						Dom.div !->
 							Dom.style
 								width: '75px'
@@ -203,7 +198,7 @@ renderBoard = !->
 								Dom.style
 									border: '2px dashed #bbb'
 									boxSizing: 'border-box'
-									background:  "url(#{Plugin.resourceUri('addphoto.png')}) 50% 50% no-repeat"
+									background:  "url(#{App.resourceUri('addphoto.png')}) 50% 50% no-repeat"
 									backgroundSize: '32px'
 
 							Dom.onTap !->
@@ -227,7 +222,6 @@ renderBoard = !->
 
 		# Top entry: adding a topic
 		Ui.item !->
-			Dom.style padding: '8px 4px'
 			addE = Form.text
 				simple: true
 				name: 'topic'
@@ -244,13 +238,12 @@ renderBoard = !->
 						searchLast.set false
 						addingUrl.set false
 				onReturn: save
-				inScope: !->
-					Dom.style
-						Flex: 1
-						display: 'block'
-						fontSize: '100%'
-						border: 'none'
-					Dom.prop 'rows', 1
+				style:
+					Flex: 1
+					display: 'block'
+					fontSize: '100%'
+					padding: 0
+					border: 'none'
 				onContent: (content) !->
 					urls = []
 					text = content
@@ -266,11 +259,11 @@ renderBoard = !->
 		Obs.observe !->
 			if editingInput.get() and !searching.get()
 				Ui.item !->
-					Dom.style padding: '8px 4px', color: Plugin.colors().highlight
+					Dom.style padding: '8px', color: App.colors().highlight
 					Icon.render
 						data: 'edit'
 						size: 18
-						color: Plugin.colors().highlight
+						color: App.colors().highlight
 						style:
 							padding: '0 16px'
 							marginRight: '10px'
@@ -279,11 +272,11 @@ renderBoard = !->
 
 				if editingInput.get() isnt searchLast.get()
 					Ui.item !->
-						Dom.style padding: '8px 4px', color: Plugin.colors().highlight
+						Dom.style padding: '8px', color: App.colors().highlight
 						Icon.render
 							data: 'world'
 							size: 18
-							color: Plugin.colors().highlight
+							color: App.colors().highlight
 							style:
 								padding: '0 16px'
 								marginRight: '10px'
@@ -297,7 +290,7 @@ renderBoard = !->
 				for pos,result of results then do (result) !->
 					topic = Obs.create result
 					Ui.item !->
-						Dom.style padding: '8px 4px'
+						Dom.style padding: '8px'
 						renderListTopic topic, true, !->
 							Dom.div !->
 								Dom.style color: '#aaa', fontSize: '75%', marginTop: '6px'
@@ -329,7 +322,7 @@ renderBoard = !->
 			maxId = 0|Db.shared.get 'maxId'
 			if addingTopic.get()>maxId
 				Ui.item !->
-					Dom.style padding: '8px 4px', color: '#aaa'
+					Dom.style padding: '8px', color: '#aaa'
 					Dom.div !->
 						Dom.style
 							Box: 'center middle'
@@ -350,7 +343,7 @@ renderBoard = !->
 
 			Ui.item !->
 				Dom.style
-					padding: '8px 4px'
+					padding: '8px'
 					Box: 'middle'
 
 				renderListTopic topic, false, !->
@@ -361,16 +354,16 @@ renderBoard = !->
 							fontSize: '70%'
 							color: '#aaa'
 						Dom.div !->
-							Dom.text Plugin.userName(topic.get('by'))
+							Dom.text App.userName(topic.get('by'))
 							Dom.text " • "
 							Time.deltaText topic.get('time'), 'short'
 
 						Dom.div !->
-							Dom.style Flex: 1, textAlign: 'right', fontWeight: 'bold', marginTop: '1px', paddingRight: '2px'
+							Dom.style Flex: 1, textAlign: 'right', fontWeight: 'bold', marginTop: '1px', paddingRight: '4px'
 
 							if commentCnt = Db.shared.get('comments', topic.key(), 'max')
 								Dom.span !->
-									Dom.style display: 'inline-block', padding: '5px 0 5px 8px', margin: '-7px -3px'
+									Dom.style display: 'inline-block', padding: '5px 0 5px 8px'
 									Icon.render
 										data: 'comments'
 										size: 13
@@ -382,7 +375,7 @@ renderBoard = !->
 							likeCnt++ for k,v of Db.shared.get('likes', topic.key()+'-topic') when +k and v>0
 							if likeCnt
 								Dom.span !->
-									Dom.style display: 'inline-block', padding: '5px 0 5px 10px', margin: '-7px -3px'
+									Dom.style display: 'inline-block', padding: '5px 0 5px 10px'
 									Icon.render
 										data: 'thumbup'
 										size: 13
@@ -397,9 +390,7 @@ renderBoard = !->
 
 		, (topic) ->
 			if +topic.key()
-				createTime = topic.get('time')
-				orderTime = Event.getOrder([topic.key()])
-				-Math.max(createTime, orderTime)
+				-topic.get('time')
 
 		Obs.observe !->
 			if empty.get()
@@ -459,21 +450,16 @@ renderListTopic = (topic, searchResult, bottomContent) !->
 						Dom.text ' '+domain
 
 			Dom.div !->
-				Dom.style Box: 'middle', marginRight: '-6px'
+				Dom.style Box: 'middle'
 				Event.renderBubble [topic.key()]
 
 
 		bottomContent() if bottomContent
 
 
-if !Db.shared
-	exports.renderSettings = !->
-		Dom.div !->
-			Form.input
-				name: '_title'
-				text: tr("Board title (optional)")
+exports.renderSettings = !->
+	Form.input
+		name: '_title'
+		text: tr("Board topic")
+		value: App.title()
 
-###
-exports.renderInfo = !->
-	Dom.div tr("Info!")
-###

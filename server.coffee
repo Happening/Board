@@ -4,9 +4,7 @@ Http = require 'http'
 Metatags = require 'metatags'
 OAuth = require 'oauth'
 Photo = require 'photo'
-Plugin = require 'plugin'
-
-exports.getTitle = -> # we implemented our own title input
+App = require 'app'
 
 # The `secrets.server.coffee` file cannot be added to the git repo, for
 # obvious reasons. The function should return Yahoo credentials like:
@@ -55,17 +53,17 @@ exports.onSearchMeta = (cb, url, pos, resp) !->
 exports.client_add = (text) !->
 	if typeof text is 'object'
 		if text.photoguid
-			text.by = Plugin.userId()
+			text.by = App.userId()
 			Photo.claim text.photoguid, text
 		else
-			addTopic Plugin.userId(), text # not used for search results anymore
+			addTopic App.userId(), text # not used for search results anymore
 	else if (text.toLowerCase().indexOf('http') is 0 or text.toLowerCase().indexOf('www.') is 0) and text.split(' ').length is 1
 		Http.get
 			url: text
-			cb: ['httpTags', Plugin.userId(), text]
-			memberId: Plugin.userId()
+			cb: ['httpTags', App.userId(), text]
+			memberId: App.userId()
 	else
-		addTopic Plugin.userId(), title: text
+		addTopic App.userId(), title: text
 
 exports.onPhoto = (info, data) !->
 	#log 'info > ' + JSON.stringify(info)
@@ -100,11 +98,11 @@ addTopic = (userId, data) !->
 	maxId = Db.shared.incr('maxId')
 	Db.shared.set(maxId, topic)
 
-	name = Plugin.userName(userId)
+	name = App.userName(userId)
 	Event.create
 		text: "#{name} added topic: #{topic.title}"
 		sender: userId
 
 exports.client_remove = (id) !->
-	return if Plugin.userId() isnt Db.shared.get(id, 'by') and !Plugin.userIsAdmin()
+	return if App.userId() isnt Db.shared.get(id, 'by') and !App.userIsAdmin()
 	Db.shared.remove(id)
